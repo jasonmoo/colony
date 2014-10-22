@@ -64,6 +64,7 @@ type Service struct {
 	i                  int    // this is just for IDs #TODO make this not crap
 	handlers           map[messageID]chan Message
 	addHandlerChan     chan handlerIDPair
+	removeHandlerChan  chan handlerIDPair
 	callHandlerChan    chan Message
 	producer           *nsq.Producer
 	nsqLookupdHTTPAddr string
@@ -132,6 +133,7 @@ func NewService(name, id, nsqLookupd string) *Service {
 		ID:                 id,
 		handlers:           make(map[messageID]chan Message),
 		addHandlerChan:     make(chan handlerIDPair),
+		removeHandlerChan:  make(chan handlerIDPair),
 		callHandlerChan:    make(chan Message),
 		producer:           producer,
 		nsqLookupdHTTPAddr: nsqLookupd,
@@ -176,8 +178,10 @@ func (s Service) start() {
 					log.Fatal(err.Error())
 				}
 				// once the handler is complete, delete it from the handler map
-				delete(s.handlers, pair.id)
+				s.removeHandlerChan <- pair
 			}()
+		case pair := <-s.removeHandlerChan:
+			delete(s.handlers, pair.id)
 		case msg := <-s.callHandlerChan:
 			c, ok := s.handlers[msg.MessageID]
 			if !ok {
